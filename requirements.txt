@@ -6,3 +6,4 @@ python-dotenv
 langchain-community
 google-genai
 reportlab
+markdown
