@@ -1,5 +1,5 @@
 
-from langchain.llms import Gemini
+from google import genai
 from langchain.prompts import PromptTemplate
 from langgraph.graph import StateGraph, END
 from typing import Dict, TypedDict
@@ -9,11 +9,12 @@ from dotenv import load_dotenv
 load_dotenv()
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
-llm = Gemini(api_key=GEMINI_API_KEY)
+llm_client = genai.Client(api_key=GEMINI_API_KEY) 
 
 # Define state structure
 class AgentState(TypedDict):
     topic: str
+    knowledge_level: str
     questions: list
     llm_answers: list
     web_answers: list
@@ -22,17 +23,25 @@ class AgentState(TypedDict):
 
 # Prompts
 question_prompt = PromptTemplate(
-    input_variables=["topic"],
-    template="Generate 10 detailed, foundational questions about {topic} that require in-depth answers.These answers should be separated by newlines. No need to generate anything else, just the questions."
+    input_variables=["topic", "knowledge_level"],
+    template="Generate 10 questions about {topic} with {knowledge_level} difficulty level that require in-depth answers. The questions should be increasing order of context (From Basic to Complex according to given difficulty level). Output should strictly start with questions only and should only contain questions."
 )
+
 answer_prompt = PromptTemplate(
     input_variables=["question"],
-    template="Provide a detailed answer (3-5 paragraphs) to this question: {question}. Include examples and explanations."
+    template="Provide a detailed answer (400-500 words) to this question: {question}. Include examples and explanations. Answers should be bullet points separated by newlines."
 )
+
+def llm(prompt):
+    response = llm_client.models.generate_content(
+        model="gemini-2.0-flash",
+        contents=prompt
+    )
+    return response.text
 
 # Node functions
 def generate_questions(state: AgentState) -> AgentState:
-    questions = llm(question_prompt.format(topic=state["topic"])).split("\n")
+    questions = llm(question_prompt.format(topic=state["topic"], knowledge_level=state["knowledge_level"])).split("\n")
     state["questions"] = [q.strip() for q in questions if q.strip()]
     return state
 
@@ -65,11 +74,12 @@ def refine_answers(state: AgentState) -> AgentState:
     return state
 
 def compile_document(state: AgentState) -> AgentState:
-    doc = f"# In-Depth Guide to {state['topic']}\n\nThis document provides detailed insights into {state['topic']}.\n\n"
+    doc = f"# A comprehensive Guide to {state['topic']}\n\nThis document provides detailed insights into {state['topic']}. Difficulty level: {state['knowledge_level']}\n\n"
     for q, a in zip(state["questions"], state["final_answers"]):
         doc += f"## {q}\n{a}\n\n"
     state["document"] = doc
     return state
+
 
 # Build the agent graph
 workflow = StateGraph(AgentState)
@@ -87,3 +97,13 @@ workflow.add_edge("compile_document", END)
 
 workflow.set_entry_point("generate_questions")
 agent = workflow.compile()
+
+
+def generate_document(topic: str, knowledge_level: str, update_progress=None) -> str:
+    initial_state = {
+        "topic": topic,
+        "knowledge_level": knowledge_level,
+        "update_progress": update_progress
+    }
+    final_state = agent.invoke(initial_state)  # Use precompiled agent
+    return final_state["document"]
