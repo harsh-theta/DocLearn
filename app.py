@@ -1,7 +1,5 @@
 import streamlit as st
 from agent import generate_document  # Import from backend
-import markdown
-import pdfkit
 from reportlab.lib.pagesizes import A4
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet
