@@ -2,6 +2,11 @@ import streamlit as st
 from agent import generate_document  # Import from backend
 import markdown
 import pdfkit
+from reportlab.lib.pagesizes import A4
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib import colors
+import re
 
 # Set wide layout
 st.set_page_config(
@@ -16,12 +21,49 @@ def update_progress(message):
 
 # Function to convert Markdown to PDF
 def convert_to_pdf(markdown_content, filename):
-    # Convert Markdown to HTML
-    html_content = markdown.markdown(markdown_content, extensions=['extra'])  # 'extra' supports tables, etc.
-    # Convert HTML to PDF
-    output_file = f"{filename}.pdf"
-    pdfkit.from_string(html_content, output_file)
-    with open(output_file, 'rb') as f:
+    pdf_file = f"{filename}.pdf"
+    doc = SimpleDocTemplate(pdf_file, pagesize=A4, leftMargin=36, rightMargin=36, topMargin=36, bottomMargin=36)
+    styles = getSampleStyleSheet()
+    
+    # Customize styles
+    heading1 = styles['Heading1']
+    heading2 = styles['Heading2']
+    normal = styles['Normal']
+    normal.leading = 14  # Line spacing
+    
+    # Elements to build into PDF
+    story = []
+    
+    # Split Markdown into lines and process
+    lines = markdown_content.split('\n')
+    for line in lines:
+        line = line.strip()
+        if not line:
+            story.append(Spacer(1, 12))  # Add space between paragraphs
+            continue
+        
+        # Handle headers
+        if line.startswith('# '):
+            story.append(Paragraph(line[2:], heading1))
+        elif line.startswith('## '):
+            story.append(Paragraph(line[3:], heading2))
+        else:
+            # Handle inline <sub> and <sup> tags
+            def replace_tags(match):
+                tag = match.group(0)
+                content = match.group(1)
+                if '<sub>' in tag:
+                    return f'<sub>{content}</sub>'  # Reportlab uses <sub> directly
+                elif '<sup>' in tag:
+                    return f'<sup>{content}</sup>'
+                return tag
+            
+            formatted_line = re.sub(r'(<sub>.*?</sub>|<sup>.*?</sup>)', replace_tags, line)
+            story.append(Paragraph(formatted_line, normal))
+    
+    # Build PDF
+    doc.build(story)
+    with open(pdf_file, 'rb') as f:
         return f.read()
 
 # Sidebar for inputs

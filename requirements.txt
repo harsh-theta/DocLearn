@@ -5,5 +5,4 @@ langgraph
 python-dotenv
 langchain-community
 google-genai
-markdown
-pdfkit
+reportlab
